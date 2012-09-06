@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="huksley-graylog2-gelf-jul-handler" basedir="." default="jar">
+    <description>Build</description>
+    <property name="dir.build" value="build"/>
+    <property name="dir.target" value="${dir.build}/target"/>
+    <property name="dir.classes" value="${dir.target}/classes"/>
+    <property name="dir.dist" value="${dir.target}/dist"/>
+    <property name="dir.src" value="src"/>
+    <target name="clean">
+        <delete dir="${dir.target}"/>
+        <mkdir dir="${dir.target}"/>
+        <mkdir dir="${dir.classes}"/>
+        <mkdir dir="${dir.dist}"/>
+    </target>
+    <target name="compile" depends="clean">
+        <javac srcdir="${dir.src}" destdir="${dir.classes}"/>
+    </target>
+    <target name="jar" depends="compile">
+        <jar destfile="${dir.dist}/${ant.project.name}.jar"
+             basedir="${dir.classes}"/>
+    </target>
+</project>
