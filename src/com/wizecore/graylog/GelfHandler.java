@@ -152,7 +152,7 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
 		if (f != null) {
 			for (StringTokenizer en = new StringTokenizer(f, ",; \r\n\t"); en.hasMoreElements();) {
 				String v = en.nextToken();
-				if (v != null && v.trim().equals("=")) {
+				if (v != null && !v.trim().equals("=")) {
 					String n = v;
 					int eqi = v.indexOf("=");
 					if (eqi >= 0) {
