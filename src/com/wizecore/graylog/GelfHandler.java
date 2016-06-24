@@ -157,7 +157,7 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
 					int eqi = v.indexOf("=");
 					if (eqi >= 0) {
 						v = v.substring(eqi + 1);
-						n = v.substring(0, eqi);
+						n = n.substring(0, eqi);
 						getFields().put(n, v);
 					}
 				}
