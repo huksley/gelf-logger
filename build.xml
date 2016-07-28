@@ -1,22 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project name="huksley-graylog2-gelf-jul-handler" basedir="." default="jar">
-    <description>Build</description>
+<project name="gelf-logger" basedir="." default="jar">
+    <description>Build JAR using your grandma`s ant build system</description>
+
     <property name="dir.build" value="build"/>
-    <property name="dir.target" value="${dir.build}/target"/>
-    <property name="dir.classes" value="${dir.target}/classes"/>
-    <property name="dir.dist" value="${dir.target}/dist"/>
+    <property name="dir.classes" value="${dir.build}"/>
+    <property name="dir.dist" value="dist"/>
     <property name="dir.src" value="src"/>
+	<property name="dir.lib" value="lib"/>
+
     <target name="clean">
-        <delete dir="${dir.target}"/>
-        <mkdir dir="${dir.target}"/>
+        <delete dir="${dir.dist}"/>
         <mkdir dir="${dir.classes}"/>
         <mkdir dir="${dir.dist}"/>
     </target>
+
+	<path id="classpath">
+    	<pathelement path="${dir.src}" />
+	    <pathelement path="${dir.classes}" />
+    	<fileset dir="${dir.lib}" includes="*.jar" />
+	</path>
+
     <target name="compile" depends="clean">
-        <javac srcdir="${dir.src}" destdir="${dir.classes}"/>
+        <javac debug="true" classpathref="classpath" encoding="UTF-8" srcdir="${dir.src}" destdir="${dir.classes}"/>
     </target>
+
     <target name="jar" depends="compile">
-        <jar destfile="${dir.dist}/${ant.project.name}.jar"
-             basedir="${dir.classes}"/>
+        <jar destfile="${dir.dist}/${ant.project.name}.jar" basedir="${dir.classes}"/>
     </target>
 </project>

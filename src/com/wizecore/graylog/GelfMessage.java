@@ -4,46 +4,52 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
-import java.util.logging.Level;
+import java.util.Map.Entry;
 
 /**
- * Gelf message data, including optional additional fields.
+ * Abstract self-contained GELF message representation, able to be converted to JSON string. 
+ * 
+ * @author ruslan
  */
-public class GelfMessage {
-
-    private static final String GELF_VERSION = "1.0";
+public class GelfMessage {    
+	private static final String ID_NAME = "id";	
+    private static final String GELF_VERSION = "1.1";
 
     private String version = GELF_VERSION;
     private String host;
     private String shortMessage;
     private String fullMessage;
-    private Long timestamp;
-    private long javaTimestamp;
-    private String level;
+    private long timestamp;
+    private int level;
     private String facility = "gelf-java";
-    private String line;
+    private int line;
     private String file;
     private Map<String, Object> additonalFields = new HashMap<String, Object>();
+	// Field message max length
+	protected static final int MAX_MESSAGE_LENGTH = 250;
+    
+    public final static int SYSLOG_WARN = 4;
+    public final static int SYSLOG_ERROR = 3;
+    public final static int SYSLOG_INFO = 6;
 
     public GelfMessage() {
     }
 
     // todo: merge these constructors.
     
-    public GelfMessage(String shortMessage, String fullMessage, Date timestamp, String level) {
+    public GelfMessage(String shortMessage, String fullMessage, Date timestamp, int level) {
         this.shortMessage = shortMessage;
         this.fullMessage = fullMessage;
-        this.javaTimestamp = timestamp.getTime();
-        this.timestamp = javaTimestamp / 1000L;
-        this.level = level;
+        this.timestamp = timestamp.getTime();
+        this.level = level != 0 ? level : SYSLOG_INFO;
     }
 
-    public GelfMessage(String shortMessage, String fullMessage, Long timestamp, String level, String line, String file) {
+    public GelfMessage(String shortMessage, String fullMessage, long timestamp, int level, String file, int line) {
         this.shortMessage = shortMessage;
         this.fullMessage = fullMessage;
-        this.javaTimestamp = timestamp;
-        this.timestamp = javaTimestamp / 1000L;
+        this.timestamp = timestamp;
         this.level = level;
         this.line = line;
         this.file = file;
@@ -81,23 +87,19 @@ public class GelfMessage {
         this.fullMessage = fullMessage;
     }
 
-    public Long getTimestamp() {
+    public long getTimestamp() {
         return timestamp;
     }
-    
-    public Long getJavaTimestamp() {
-        return javaTimestamp;
-    }
 
-    public void setTimestamp(Long timestamp) {
+    public void setTimestamp(long timestamp) {
         this.timestamp = timestamp;
     }
 
-    public String getLevel() {
+    public int getLevel() {
         return level;
     }
 
-    public void setLevel(String level) {
+    public void setLevel(int level) {
         this.level = level;
     }
 
@@ -109,11 +111,11 @@ public class GelfMessage {
         this.facility = facility;
     }
 
-    public String getLine() {
+    public int getLine() {
         return line;
     }
 
-    public void setLine(String line) {
+    public void setLine(int line) {
         this.line = line;
     }
 
@@ -123,11 +125,6 @@ public class GelfMessage {
 
     public void setFile(String file) {
         this.file = file;
-    }
-
-    public GelfMessage addField(String key, String value) {
-        getAdditonalFields().put(key, value);
-        return this;
     }
 
     public GelfMessage addField(String key, Object value) {
@@ -151,10 +148,97 @@ public class GelfMessage {
         return str == null || "".equals(str.trim());
     }
     
-	public static String extractStacktrace(Throwable t) {
+	public static String extractStacktrace(Throwable t, GelfMessage m, int elementToFileLine) {
         StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
+        PrintWriter pw = new PrintWriter(sw);        
         t.printStackTrace(pw);
+        StackTraceElement[] st = t.getStackTrace();
+		if (st != null && m != null && 
+			elementToFileLine >= 0 && elementToFileLine < st.length &&
+			m.getFile() == null) {
+        	m.setFile(st[elementToFileLine].getFileName());
+        	m.setLine(st[elementToFileLine].getLineNumber());
+        }
         return sw.toString();
     }
+	
+	public static String formatMessage(GelfMessage m) {
+        Map<String, Object> map = new HashMap<String, Object>();
+
+        map.put("version", m.getVersion());
+        map.put("host", m.getHost());
+		map.put("short_message", m.getShortMessage());
+		if (m.getFullMessage() == null) {
+			map.put("full_message", m.getShortMessage());
+		} else {
+			map.put("full_message", m.getFullMessage());
+		}
+        long ms = m.getTimestamp();
+        map.put("timestamp", ((long) Math.floor(ms / 1000.0)) + "." + (ms % 1000));
+
+        map.put("level", m.getLevel());
+        map.put("facility", m.getFacility());
+        if (m.getFile() != null) {
+        	map.put("file", m.getFile());
+        }
+        if (m.getLine() > 0) {
+        	map.put("line", m.getLine());
+        }
+
+        for (Map.Entry<String, Object> additionalField : m.getAdditonalFields().entrySet()) {
+            if (!ID_NAME.equals(additionalField.getKey())) {
+                map.put("_" + additionalField.getKey(), additionalField.getValue());
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("{ ");
+        boolean start = true;
+        for (Iterator<Entry<String, Object>> it = map.entrySet().iterator(); it.hasNext(); ) { 
+        	Entry<String, Object> e = it.next();
+        	String name = e.getKey();
+        	Object value = e.getValue();
+    		
+        	if (start) {
+        		start = false;
+    		} else {
+    			sb.append(", ");
+    		}
+    		sb.append("\"");
+    		sb.append(name);
+    		sb.append("\": ");
+    		
+        	if (value != null) {
+        		if (value instanceof Double) {
+            		sb.append(((Number) value).doubleValue());
+        		} else
+        		if (value instanceof Integer) {
+            		sb.append(((Number) value).intValue());
+        		} else
+        		if (value instanceof Long) {
+            		sb.append(((Number) value).longValue());
+        		} else {
+            		String s = escapeJson(value);
+            		sb.append("\"");
+            		sb.append(s);
+            		sb.append("\"");
+        		}
+        	} else {
+        		sb.append("null");
+        	}
+        }
+        sb.append(" }");
+        return sb.toString();
+    }
+
+	public static String escapeJson(Object value) {
+		String s = value.toString().trim();
+		s = s.replace("\\", "\\\\");
+		s = s.replace("\"", "\\\"");		
+		s = s.replace("\n", "\\n");
+		s = s.replace("\r", "\\r");
+		s = s.replace("\t", "\\t");
+		return s;
+	}
+
 }

@@ -11,26 +11,19 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.LogRecord;
-import java.util.logging.SimpleFormatter;
 
 /**
  * Java java.util.logging.Handler implementation which sends messages to Graylog2 in GELF format.
  * <p>
  * Loosely based on https://github.com/Graylog2/gelfj implementation for log2j by Anton Yakimov &amp; Jochen Schalanda.
  *
- * @author Huksley <husley@wizecore.com>
+ * @author Ruslan Gainutdinov <husley@wizecore.com>
  * @author Anton Yakimov
  * @author Jochen Schalanda
  */
-public class GelfHandler extends Handler implements GelfMessageProvider {
+public class GelfHandler extends Handler {
 
-    private static final int MAX_SHORT_MESSAGE_LENGTH = 250;
-    private static final String ORIGIN_HOST_KEY = "originHost";
-    private static final String LOGGER_NAME = "logger";
-    private static final String LOGGER_NDC = "loggerNdc";
-    private static final String JAVA_TIMESTAMP = "timestampMs";
-	
-    protected LogManager manager = LogManager.getLogManager();
+	protected LogManager manager = LogManager.getLogManager();
     protected GelfSender sender;
     protected String originHost;
     protected String facility;
@@ -114,8 +107,8 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
     		try {
     			configure();
     		} catch (IOException e) {
-    			// Don`t care
-    			e.printStackTrace();    			
+	        	// Don`t care, but don`t printStackTrace to avoid loops
+	        	System.err.println("Failed to configure sender: " + e);
     		}
     	}
     	
@@ -125,8 +118,8 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
 		        try {
 		        	sender.sendMessage(m);
 		        } catch (IOException e) {
-		        	// Don`t care
-		        	e.printStackTrace();
+		        	// Don`t care, but don`t printStackTrace to avoid loops
+		        	System.err.println("Failed to send to graylog: " + e);
 		        }
 			}
     	}
@@ -136,16 +129,25 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
     	String cname = getClass().getName();		
 		setLevel(getLevelProperty(cname + ".level", Level.INFO));
 		setFilter(getFilterProperty(cname + ".filter", null));
-		setFormatter(getFormatterProperty(cname + ".formatter", new SimpleFormatter()));
-
-		GelfSender s = new GelfSender(
-			getStringProperty(cname + ".host", "localhost"), 
-			Integer.parseInt(getStringProperty(cname + ".port", String.valueOf(GelfSender.DEFAULT_PORT)))
-		);		
+		Formatter fmt = getFormatterProperty(cname + ".formatter", null);
+		if (fmt != null) {
+			setFormatter(fmt);
+		}
 		
-		addExtendedInformation = "true".equalsIgnoreCase(getStringProperty(cname + ".extended", "true"));
+		String protocol = getStringProperty(cname + ".protocol", "udp");
+		int proto = 0;
+		if (protocol.equalsIgnoreCase("udp")) {
+			proto = 0;
+		} else
+		if (protocol.equalsIgnoreCase("tcp")) {
+			proto = 1;
+		} else {
+			throw new IOException("Unknown protocol: " + protocol);
+		}
+		
+		addExtendedInformation = "true".equalsIgnoreCase(getStringProperty(cname + ".extended", "true"));		
 		extractStacktrace = "true".equalsIgnoreCase(getStringProperty(cname + ".stacktrace", "true"));
-		facility = getStringProperty(cname + ".facility", facility);
+		facility = getStringProperty(cname + ".facility", System.getProperty("jvmRoute", facility));
 		originHost = getStringProperty(cname + ".originHost", originHost);
 		
 		String f = getStringProperty(cname + ".fields", null);
@@ -164,13 +166,16 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
 			}
 		}
 		
+		GelfSender s = new GelfSender(
+			proto,
+			getStringProperty(cname + ".host", "localhost"), 
+			Integer.parseInt(getStringProperty(cname + ".port", String.valueOf(GelfSender.DEFAULT_PORT)))
+		);	
+	
 		sender = s;
-		
-		// FIXME: Which is the best way to log inside logging handler? Obviosly not using logging infrastucture we are part of.
-		System.err.println("Starting GELF handler: gelf://" + 
-						sender.getHost().getHostName() + ":" + sender.getPort() + 
+		System.err.println("Started GELF handler: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + 
 						", min level " + getLevel() + 
-						", facility " + getFacility());
+						", facility " + getFacility() + ", formatter " + getFormatter());
 	}
 
 	protected GelfMessage makeMessage(LogRecord event) {
@@ -184,20 +189,25 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
         }
 
         String shortMessage;
-        if (renderedMessage.length() > MAX_SHORT_MESSAGE_LENGTH) {
-            shortMessage = renderedMessage.substring(0, MAX_SHORT_MESSAGE_LENGTH - 1);
+        if (renderedMessage.length() > GelfMessage.MAX_MESSAGE_LENGTH) {
+            shortMessage = renderedMessage.substring(0, GelfMessage.MAX_MESSAGE_LENGTH - 1);
         } else {
             shortMessage = renderedMessage;
         }
 
-        if (isExtractStacktrace()) {
-            Throwable t = event.getThrown();
-            if (t != null) {
-                renderedMessage += "\n\r" + GelfMessage.extractStacktrace(t);
-            }
+        // Receive stack trace and file:line
+        GelfMessage m = null;
+        Throwable t = event.getThrown();
+        if (isExtractStacktrace() && t != null) {
+        	m = new GelfMessage();
+        	renderedMessage += "\n" + GelfMessage.extractStacktrace(t, m, 0);
         }
         
-        GelfMessage gelfMessage = new GelfMessage(shortMessage, renderedMessage, timeStamp, getSyslogEquivalent(level), null, null);        
+        GelfMessage gelfMessage = new GelfMessage(shortMessage, renderedMessage, timeStamp, getSyslogEquivalent(level), null, 0);
+        if (m != null) {
+        	gelfMessage.setFile(m.getFile());
+        	gelfMessage.setLine(m.getLine());
+        }
 
         if (getOriginHost() != null) {
             gelfMessage.setHost(getOriginHost());
@@ -212,40 +222,49 @@ public class GelfHandler extends Handler implements GelfMessageProvider {
             gelfMessage.addField(entry.getKey(), entry.getValue());
         }
 
-        if (isAddExtendedInformation()) {
-            gelfMessage.addField(JAVA_TIMESTAMP, Long.toString(gelfMessage.getJavaTimestamp()));
+        if (addExtendedInformation) {
+            if (t != null) {
+            	gelfMessage.addField("exception", t.getClass().getName());
+            }
+            if (t != null && t.getMessage() != null) {
+            	gelfMessage.addField("exception_message", t.getMessage());
+            }
             gelfMessage.addField("thread_name", Thread.currentThread().getName());
             gelfMessage.addField("original_level", level.getName());
             gelfMessage.addField("char_length", renderedMessage.length());
             
             if (event.getSourceClassName() != null) {
             	if (event.getSourceMethodName() != null) {
-            		gelfMessage.addField("source", event.getSourceClassName() +  "." + event.getSourceMethodName());
+            		gelfMessage.addField("source_method", event.getSourceMethodName());
+            		gelfMessage.addField("source_class", event.getSourceClassName()); 
             	} else {
-            		gelfMessage.addField("source", event.getSourceClassName());
+            		gelfMessage.addField("source_class", event.getSourceClassName());
             	}
             }
             
             // Only add logger if it is different from originating class name
             if (event.getSourceClassName() == null || (event.getLoggerName() != null && !event.getLoggerName().equals(event.getSourceClassName()))) {
-                gelfMessage.addField(LOGGER_NAME, event.getLoggerName());
+                gelfMessage.addField("logger", event.getLoggerName());
             }
         }
 
         return gelfMessage;
     }
-    
-    public static String getSyslogEquivalent(Level level) {
-    	int lev = 6; // LEVEL_INFO;
+	
+	/**
+     * Convert JUL log4j to syslog equivalent.
+     */
+    public static int getSyslogEquivalent(Level level) {
+    	int lev = GelfMessage.SYSLOG_INFO;
 		switch (level.intValue()) {
 		case 1000: // SEVERE
-			lev = 3; // LEVEL_ERROR;
+			lev = GelfMessage.SYSLOG_ERROR;
 			break;			
 		case 900: // WARNING
-			lev = 4; // LEVEL_WARN;
+			lev = GelfMessage.SYSLOG_WARN;
 			break;
 		}
-		return String.valueOf(lev);
+		return lev;
 	}
 
     

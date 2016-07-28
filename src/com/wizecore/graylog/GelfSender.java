@@ -6,16 +6,16 @@ import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Random;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -24,60 +24,136 @@ import java.util.zip.GZIPOutputStream;
  * Heavily reworked to be independent and self contained. All datagram and message serialization methods moved here.
  */
 public class GelfSender {
-    public static final int DEFAULT_PORT = 12201;
+    public static final int DEFAULT_PORT = 12201;   
     
-	private static final String ID_NAME = "id";	
-    
-	private static final byte[] GELF_CHUNKED_ID = new byte[]{0x1e, 0x0f};
-    private static final int MAXIMUM_CHUNK_SIZE = 1420;
-    
+	private static final byte[] GELF_UDP_CHUNKED_ID = new byte[] { 0x1e, 0x0f };
+    private static final int MAXIMUM_UDP_CHUNK_SIZE = 1420;   
     private static final int PORT_MIN = 9000;
     private static final int PORT_MAX = 9888;
 
-    private InetAddress host;
+    private int proto = 0; // 0 - udp, 1 - tcp
+    private String host = null;
     private int port;
-    private DatagramSocket socket;
+    private DatagramSocket udpSocket;   
+    private SocketChannel tcpChannel;    
+    private InetAddress destination;
 
-    public GelfSender(String host) throws UnknownHostException, SocketException {
+    public GelfSender(String host) {
         this(host, DEFAULT_PORT);
     }
-
-    public GelfSender(String host, int port) throws UnknownHostException, SocketException {
-        this.host = InetAddress.getByName(host);
+    
+    public GelfSender(int proto, String host, int port) {
+    	this.proto = proto;
+    	this.host = host;
         this.port = port;
-        this.socket = initiateSocket();
     }
 
-    protected DatagramSocket initiateSocket() throws SocketException {
-        int port = PORT_MIN;
+    public GelfSender(String host, int port) {    	
+        this.host = host;
+        this.port = port;
+    }
 
-        DatagramSocket resultingSocket = null;
-        boolean binded = false;
-        while (!binded) {
-            try {
-                resultingSocket = new DatagramSocket(port);
-                binded = true;
-            } catch (SocketException e) {
-                port++;
-                if (port > PORT_MAX) {
-                    throw e;
+    protected void initiateSocket() throws IOException {
+    	if (proto == 0) {
+            int port = PORT_MIN;
+            DatagramSocket resultingSocket = null;
+            boolean binded = false;
+            while (!binded) {
+                try {
+                    resultingSocket = new DatagramSocket(port);
+                    binded = true;
+                } catch (SocketException e) {
+                    port++;
+                    if (port > PORT_MAX) {
+                        throw e;
+                    }
                 }
-            }
-        }
-        
-        return resultingSocket;
+            }                  
+            udpSocket = resultingSocket;
+    	} else
+    	if (proto == 1) {
+            // Will do upon log
+    	}
     }
+
+    /**
+     * Randomly choose destination
+     * 
+     * @throws UnknownHostException
+     */
+	protected void findDestination() throws UnknownHostException {
+		List<InetAddress> all = new ArrayList<InetAddress>();
+    	if (host.indexOf(",") > 0) {
+    		String[] l = host.split("\\,");
+    		for (String h: l) {
+    			all.addAll(Arrays.asList(InetAddress.getAllByName(h.trim())));
+    		}
+    	} else {
+    		all.addAll(Arrays.asList(InetAddress.getAllByName(host.trim())));
+    	}
+    	
+    	if (all.size() == 1) {
+    		destination = all.get(0);
+    	} else {
+    		// Choose one random
+    		destination = all.get(new Random(System.currentTimeMillis()).nextInt(all.size()));
+    	}
+	}
+	
+	public int getProtocol() {
+		return proto;
+	}
+	
+	public void setProtocol(int proto) {
+		this.proto = proto;
+	}
 
     public void sendMessage(GelfMessage m) throws IOException {
         if (m.isValid()) {
-        	sendDatagrams(toDatagrams(m));
+        	if (proto == 1) {
+        		String json = GelfMessage.formatMessage(m);
+        		json += '\0';
+				sendPacket(json.getBytes("UTF-8"));
+        	} else {
+        		sendDatagrams(toDatagrams(m));
+        	}
         }
     }
-    
-    protected List<byte[]> toDatagrams(GelfMessage m) throws IOException {
-        byte[] messageBytes = gzipMessage(formatMessage(m));
+
+	private void sendPacket(byte[] bytes) throws IOException {
+		try {
+    		if (tcpChannel == null || !tcpChannel.isConnected()) {
+    			findDestination();
+    			initiateSocket();
+    			tcpChannel = SocketChannel.open();
+    			tcpChannel.configureBlocking(false);
+    			tcpChannel.connect(new InetSocketAddress(destination, port));
+    			while (!tcpChannel.finishConnect()) {
+    				Thread.yield();
+    			}
+    		}   
+    		
+    		ByteBuffer buf = ByteBuffer.wrap(bytes);
+    		while (buf.hasRemaining()) {
+    			tcpChannel.write(buf);
+    			Thread.yield();
+            }
+		} catch (IOException e) {
+			destination = null;
+			try {
+				tcpChannel.close();
+			} catch (Exception ee) {
+				// Don`t care
+			}
+			tcpChannel = null;
+			System.err.println("GELF TCP Server (" + destination + ") unavailable: " + e);
+		}
+	}
+
+	private List<byte[]> toDatagrams(GelfMessage m) throws IOException {
+        byte[] messageBytes = gzipMessage(GelfMessage.formatMessage(m));
         List<byte[]> datagrams = new ArrayList<byte[]>();
-        if (messageBytes.length > MAXIMUM_CHUNK_SIZE) {
+        if (messageBytes.length > MAXIMUM_UDP_CHUNK_SIZE) {
             sliceDatagrams(m, messageBytes, datagrams);
         } else {
             datagrams.add(messageBytes);
@@ -88,11 +164,11 @@ public class GelfSender {
     protected void sliceDatagrams(GelfMessage m, byte[] messageBytes, List<byte[]> datagrams) {
         int messageLength = messageBytes.length;
         byte[] messageId = Arrays.copyOf((new Date().getTime() + m.getHost()).getBytes(), 32);
-        int num = ((Double) Math.ceil((double) messageLength / MAXIMUM_CHUNK_SIZE)).intValue();
+        int num = ((Double) Math.ceil((double) messageLength / MAXIMUM_UDP_CHUNK_SIZE)).intValue();
         for (int idx = 0; idx < num; idx++) {
-            byte[] header = concatByteArray(GELF_CHUNKED_ID, concatByteArray(messageId, new byte[]{0x00, (byte) idx, 0x00, (byte) num}));
-            int from = idx * MAXIMUM_CHUNK_SIZE;
-            int to = from + MAXIMUM_CHUNK_SIZE;
+            byte[] header = concatByteArray(GELF_UDP_CHUNKED_ID, concatByteArray(messageId, new byte[]{0x00, (byte) idx, 0x00, (byte) num}));
+            int from = idx * MAXIMUM_UDP_CHUNK_SIZE;
+            int to = from + MAXIMUM_UDP_CHUNK_SIZE;
             if (to >= messageLength) {
                 to = messageLength;
             }
@@ -117,101 +193,53 @@ public class GelfSender {
         }
         return bos.toByteArray();
     }
-    
-    public static String formatMessage(GelfMessage m) {
-        Map<String, Object> map = new HashMap<String, Object>();
-
-        map.put("version", m.getVersion());
-        map.put("host", m.getHost());
-        map.put("short_message", m.getShortMessage());
-        map.put("full_message", m.getFullMessage());
-        map.put("timestamp", m.getTimestamp().intValue());
-
-        map.put("level", m.getLevel());
-        map.put("facility", m.getFacility());
-        map.put("file", m.getFile());
-        map.put("line", m.getLine());
-
-        for (Map.Entry<String, Object> additionalField : m.getAdditonalFields().entrySet()) {
-            if (!ID_NAME.equals(additionalField.getKey())) {
-                map.put("_" + additionalField.getKey(), additionalField.getValue());
-            }
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("{ ");
-        boolean start = true;
-        for (Iterator<Entry<String, Object>> it = map.entrySet().iterator(); it.hasNext(); ) { 
-        	Entry<String, Object> e = it.next();
-        	String name = e.getKey();
-        	Object value = e.getValue();
-        	if (value != null) {
-        		String s = value.toString().trim();
-        		s = replace(s, "\n", "\\n");
-        		s = replace(s, "\r", "\\r");
-        		s = replace(s, "\t", "\\t");
-        		s = replace(s, "\"", "\\\"");
-        		
-        		if (start) {
-            		start = false;
-        		} else {
-        			sb.append(", ");
-        		}
-        		sb.append("\"");
-        		sb.append(name);
-        		sb.append("\": \"");
-        		sb.append(s);
-        		sb.append("\"");        		
-        	}
-        }
-        sb.append(" }");
-        return sb.toString();
-    }
-
-    protected void sendDatagrams(List<byte[]> bytesList) {
+        
+    protected void sendDatagrams(List<byte[]> bytesList) throws IOException {
+    	if (proto != 0) {
+    		throw new IOException("Invalid protocol!");
+    	}
+    	if (udpSocket == null) {
+    		findDestination();
+    		initiateSocket();
+    	}
         for (byte[] bytes : bytesList) {
-            DatagramPacket datagramPacket = new DatagramPacket(bytes, bytes.length, host, port);
+            DatagramPacket datagramPacket = new DatagramPacket(bytes, bytes.length, destination, port);
             try {
-                socket.send(datagramPacket);
+                udpSocket.send(datagramPacket);
             } catch (IOException e) {
-                e.printStackTrace();
+            	System.err.println("Failed to send to UDP packet: " + e);
                 break;
             }
         }
     }
 
     public void close() {
-        socket.close();
-    }
-    
-    public static String replace(String str, String what, String onwhat) {
-        int beginIndex = 0;
-        int endIndex = 0;
-        String r = "";        
-        endIndex = str.indexOf(what, beginIndex);
-        
-        while (endIndex != -1) {
-            r = r + str.substring(beginIndex, endIndex) + onwhat;
-            beginIndex = endIndex + what.length();
-            endIndex = str.indexOf(what, beginIndex);
-        }
-        
-        r = r + str.substring(beginIndex, str.length());        
-        return r;
-        
+    	if (udpSocket != null) {
+    		udpSocket.close();
+    		udpSocket = null;
+    	}
+    	
+    	if (tcpChannel != null) {
+    		try {
+				tcpChannel.close();
+			} catch (IOException e) {
+				System.err.println("Failed to send to close TCP channel: " + e);
+			}
+    		tcpChannel = null;
+    	}
     }
 
 	/**
 	 * Getter for {@link GelfSender#host}.
 	 */
-	public InetAddress getHost() {
+	public String getHost() {
 		return host;
 	}
 
 	/**
 	 * Setter for {@link GelfSender#host}.
 	 */
-	public void setHost(InetAddress host) {
+	public void setHost(String host) {
 		this.host = host;
 	}
 
