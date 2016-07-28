@@ -202,15 +202,20 @@ public class GelfSender {
     		findDestination();
     		initiateSocket();
     	}
+    	
+    	// int c = 0;
         for (byte[] bytes : bytesList) {
             DatagramPacket datagramPacket = new DatagramPacket(bytes, bytes.length, destination, port);
             try {
                 udpSocket.send(datagramPacket);
+                // c += bytes.length;
             } catch (IOException e) {
             	System.err.println("Failed to send to UDP packet: " + e);
                 break;
             }
         }
+        
+        // System.out.println("GelfSender: sent " + c + " bytes to " + destination + ":" + port);
     }
 
     public void close() {
@@ -256,4 +261,14 @@ public class GelfSender {
 	public void setPort(int port) {
 		this.port = port;
 	}
+	
+	public static String findLocalHostName() {
+        try {
+        	return InetAddress.getLocalHost().getHostName();
+        } catch (IOException e) {
+        	// Don`t care
+        	e.printStackTrace();
+        	return null;
+        }
+    }
 }

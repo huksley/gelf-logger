@@ -1,7 +1,7 @@
 gelf-logger
 ===========
 
-Unified logger for java to send message to Graylog via JUL, Log4j, etc. Zero external dependencies.
+Unified logger for java to send message to Graylog via JUL, Log4j, etc. ZERO external dependencies.
 
 Supports sending via GELF to:
   * Graylog (UDP and TCP)
@@ -10,6 +10,7 @@ Supports sending via GELF to:
 Supports logging frameworks:
   * Java Util Logging
   * Log4j (preliminary version)
+  * Log4j2 (preliminary version)
   
 Java Util Logging
 =================
@@ -86,3 +87,21 @@ Attach to root logger, or elsewhere:
     # Send all INFO logs to graylog2
     log4j.rootLogger=INFO, graylog2
 
+Log4j2
+======
+
+Add to appenders:
+	
+	<Appenders>
+		....
+		<Gelf name="gelf" host="graylog-server" facility="myapp" originHost="myserver"/>
+	</Appenders>
+	
+Add reference to logger:
+
+	<Loggers>
+		...
+		<AsyncRoot level="INFO">
+      		<AppenderRef ref="gelf"/>
+		</AsyncRoot>
+	</Loggers>

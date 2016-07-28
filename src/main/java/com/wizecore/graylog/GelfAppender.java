@@ -1,6 +1,7 @@
 package com.wizecore.graylog;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -25,6 +26,12 @@ public class GelfAppender extends AppenderSkeleton {
     protected String protocol = "udp";
     protected String host = "localhost";
     protected int port = GelfSender.DEFAULT_PORT;
+    protected String updater;
+    protected GelfMessageUpdater updaterInstance;
+    
+    public GelfAppender() {
+    	originHost = GelfSender.findLocalHostName();
+	}
 	
 	protected GelfMessage makeMessage(LoggingEvent event) {
         long timeStamp = event.getTimeStamp();
@@ -88,6 +95,10 @@ public class GelfAppender extends AppenderSkeleton {
             // FIXME: Only add logger if it is different from originating class name
             gelfMessage.addField("logger", event.getLoggerName());
         }
+        
+        if (updaterInstance != null) {
+        	updaterInstance.update(gelfMessage);
+        }
 
         return gelfMessage;
     }
@@ -104,6 +115,18 @@ public class GelfAppender extends AppenderSkeleton {
 			proto = 1;
 		} else {
 			throw new IllegalArgumentException("Unknown protocol: " + protocol);
+		}
+		
+		if (facility == null) {
+			facility = System.getProperty("jvmRoute", "gelf-logger");
+		}
+		
+		if (updater != null) {
+			try {
+				updaterInstance = (GelfMessageUpdater) Class.forName(updater).newInstance();
+			} catch (Exception e) {
+				System.err.println("GelfHandler: failed to create " + updater + " instance: " + e);
+			}
 		}
 		
 		if (fields != null) {
@@ -129,14 +152,15 @@ public class GelfAppender extends AppenderSkeleton {
 			port
 		);
 		sender = s;
-		System.err.println("Started GELF appender: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + ", facility " + getFacility());		
+		System.err.println("Started GELF appender: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + 
+				", facility " + getFacility() + ", originHost " + getOriginHost());		
 	}
  
     @Override
     protected void append(LoggingEvent event) {
         GelfMessage gelfMessage = makeMessage(event);
         
-        if (sender != null) {
+        if (sender != null && gelfMessage != null) {
         	try {
 				sender.sendMessage(gelfMessage);
 			} catch (IOException e) {
@@ -228,5 +252,29 @@ public class GelfAppender extends AppenderSkeleton {
 
 	public void setPort(int port) {
 		this.port = port;
+	}
+
+	public Map<String, String> getPreparedFields() {
+		return preparedFields;
+	}
+
+	public void setPreparedFields(Map<String, String> preparedFields) {
+		this.preparedFields = preparedFields;
+	}
+
+	public String getUpdater() {
+		return updater;
+	}
+
+	public void setUpdater(String updater) {
+		this.updater = updater;
+	}
+
+	public GelfMessageUpdater getUpdaterInstance() {
+		return updaterInstance;
+	}
+
+	public void setUpdaterInstance(GelfMessageUpdater updaterInstance) {
+		this.updaterInstance = updaterInstance;
 	}
 }

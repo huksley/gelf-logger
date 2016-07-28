@@ -14,8 +14,19 @@ import java.util.Map.Entry;
  * @author ruslan
  */
 public class GelfMessage {    
-	private static final String ID_NAME = "id";	
-    private static final String GELF_VERSION = "1.1";
+	public static final String ID_NAME = "id";	
+    public static final String GELF_VERSION = "1.1";
+	/**
+	 * Field message max length per GELF specification. Everything above will be chunked into multiple messages (UDP)
+	 */
+	public static final int MAX_MESSAGE_LENGTH = 250;
+	
+	/**
+	 * SYSLOG levels for de facto standard gelf _level field.
+	 */
+    public final static int SYSLOG_WARN = 4;
+    public final static int SYSLOG_ERROR = 3;
+    public final static int SYSLOG_INFO = 6;
 
     private String version = GELF_VERSION;
     private String host;
@@ -23,16 +34,10 @@ public class GelfMessage {
     private String fullMessage;
     private long timestamp;
     private int level;
-    private String facility = "gelf-java";
+    private String facility;
     private int line;
     private String file;
     private Map<String, Object> additonalFields = new HashMap<String, Object>();
-	// Field message max length
-	protected static final int MAX_MESSAGE_LENGTH = 250;
-    
-    public final static int SYSLOG_WARN = 4;
-    public final static int SYSLOG_ERROR = 3;
-    public final static int SYSLOG_INFO = 6;
 
     public GelfMessage() {
     }
@@ -178,9 +183,11 @@ public class GelfMessage {
 
         map.put("level", m.getLevel());
         map.put("facility", m.getFacility());
+        
         if (m.getFile() != null) {
         	map.put("file", m.getFile());
         }
+        
         if (m.getLine() > 0) {
         	map.put("line", m.getLine());
         }
@@ -228,6 +235,7 @@ public class GelfMessage {
         	}
         }
         sb.append(" }");
+        // System.out.println("GelfMessage: " + sb);
         return sb.toString();
     }
 

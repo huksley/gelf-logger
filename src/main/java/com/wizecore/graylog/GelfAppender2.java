@@ -1,10 +1,13 @@
 package com.wizecore.graylog;
 
+import java.io.IOException;
 import java.io.Serializable;
+import java.net.InetAddress;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.StringTokenizer;
 
-import org.apache.log4j.Category;
-import org.apache.log4j.Level;
-import org.apache.log4j.spi.LoggingEvent;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
 import org.apache.logging.log4j.core.LogEvent;
@@ -14,34 +17,186 @@ import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
 import org.apache.logging.log4j.core.config.plugins.PluginElement;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.apache.logging.log4j.core.layout.PatternLayout;
+import org.apache.logging.log4j.message.SimpleMessage;
 
 @Plugin(name="Gelf", category="Core", elementType="appender", printObject=true)
 public class GelfAppender2 extends AbstractAppender {
 
 	private static final long serialVersionUID = 1L;
-	protected GelfAppender appender;
-		
-    protected GelfAppender2(GelfAppender appender, String name, Filter filter,
-            Layout<? extends Serializable> layout, final boolean ignoreExceptions) {
-       super(name, filter, layout, ignoreExceptions);
-       this.appender = appender;
+	
+	protected boolean addExtendedInformation = true;
+	protected Map<String,String> preparedFields;
+	protected String fields;
+	protected String facility;
+	protected String originHost;
+	protected boolean extractStacktrace = true;
+	protected GelfSender sender;
+	protected GelfMessageUpdater updaterInstance;
+	
+	protected GelfAppender2(String name, Filter filter,
+            Layout<? extends Serializable> layout, final boolean ignoreExceptions,
+            String protocol, String host, int port, 
+            boolean addExtendedInformation, 
+            String fields, 
+            String facility, String originHost, 
+            boolean extractStackTrace, String updater) {
+    	super(name, filter, layout, ignoreExceptions);
+       
+    	this.addExtendedInformation = addExtendedInformation;
+    	this.fields = fields;
+    	this.facility = facility;
+    	this.originHost = originHost;
+    	this.extractStacktrace = extractStackTrace;
+    	
+    	int proto = 0;
+        if (protocol.equalsIgnoreCase("udp")) {
+        	proto = 0;
+        } else
+        if (protocol.equalsIgnoreCase("tcp")) {
+        	proto = 1;
+        } else {
+        	throw new IllegalArgumentException("Unknown protocol: " + protocol);
+        }
+        
+        if (updater != null) {
+			try {
+				updaterInstance = (GelfMessageUpdater) Class.forName(updater).newInstance();
+			} catch (Exception e) {
+				System.err.println("GelfHandler: failed to create " + updater + " instance: " + e);
+			}
+		}
+        
+        if (fields != null) {
+        	Map<String,String> preparedFields = new HashMap<String, String>();
+        	for (StringTokenizer en = new StringTokenizer(fields, ",; \r\n\t"); en.hasMoreElements();) {
+        		String v = en.nextToken();
+        		if (v != null && !v.trim().equals("=")) {
+        			String n = v;
+        			int eqi = v.indexOf("=");
+        			if (eqi >= 0) {
+        				v = v.substring(eqi + 1);
+        				n = n.substring(0, eqi);
+        				preparedFields.put(n, v);
+        			}
+        		}
+        	}
+        	this.preparedFields = preparedFields;  
+        }
+        
+        GelfSender s = new GelfSender(
+        	proto,
+        	host,
+        	port
+        );
+        sender = s;
+        System.err.println("Started GELF appender: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + 
+        		", facility " + getFacility() + ", originHost " + getOriginHost());		
+    }
+    
+    /**
+     * Convert log4j2 level to syslog equivalent.
+     */
+    public static int getSyslogEquivalent(Level level) {
+    	int lev = GelfMessage.SYSLOG_INFO;
+    	if (level == Level.FATAL || level == Level.ERROR) {
+    		lev = GelfMessage.SYSLOG_ERROR;
+    	} else
+    	if (level == Level.WARN) {
+    		lev = GelfMessage.SYSLOG_WARN;
+    	}
+		return lev;
+	}
+    
+    protected GelfMessage makeMessage(LogEvent event) {
+        long timeStamp = event.getTimeMillis();
+        Level level = event.getLevel();
+
+        String renderedMessage = null;
+        if (event.getMessage() != null) {        	
+        	renderedMessage = event.getMessage().getFormattedMessage();
+        }
+        if (renderedMessage == null || renderedMessage.isEmpty()) {
+        	return null;
+        }
+        
+        String shortMessage;
+        if (renderedMessage.length() > GelfMessage.MAX_MESSAGE_LENGTH) {
+            shortMessage = renderedMessage.substring(0, GelfMessage.MAX_MESSAGE_LENGTH - 1);
+        } else {
+            shortMessage = renderedMessage;
+        }
+
+        // Receive stack trace and file:line
+        GelfMessage m = null;
+        Throwable t = event.getThrown();
+        if (isExtractStacktrace() && t != null) {
+        	m = new GelfMessage();
+        	renderedMessage += "\n" + GelfMessage.extractStacktrace(t, m, 0);
+        }
+        
+        GelfMessage gelfMessage = new GelfMessage(shortMessage, renderedMessage, timeStamp, getSyslogEquivalent(level), null, 0);
+        if (m != null) {
+        	gelfMessage.setFile(m.getFile());
+        	gelfMessage.setLine(m.getLine());
+        }
+
+        if (getOriginHost() != null) {
+            gelfMessage.setHost(getOriginHost());
+        }
+
+        if (getFacility() != null) {
+            gelfMessage.setFacility(getFacility());
+        }
+
+        Map<String, String> fields = preparedFields;
+        if (fields != null) {
+            for (Map.Entry<String, String> entry : fields.entrySet()) {
+                gelfMessage.addField(entry.getKey(), entry.getValue());
+            }
+        }
+
+        if (addExtendedInformation) {
+            if (t != null) {
+            	gelfMessage.addField("exception", t.getClass().getName());
+            }
+            if (t != null && t.getMessage() != null) {
+            	gelfMessage.addField("exception_message", t.getMessage());
+            }
+            gelfMessage.addField("thread_name", Thread.currentThread().getName());
+            gelfMessage.addField("original_level", level.toString());
+            gelfMessage.addField("char_length", renderedMessage.length());
+            
+            // FIXME: Only add logger if it is different from originating class name
+            gelfMessage.addField("logger", event.getLoggerName());
+        }
+        
+        if (updaterInstance != null) {
+        	updaterInstance.update(gelfMessage);
+        }
+
+        return gelfMessage;
     }
 
     @Override
     public void append(LogEvent event) {
-    	appender.append(downgrade(event));
+    	GelfMessage gelfMessage = makeMessage(event);
+        
+        if (sender != null && gelfMessage != null) {
+        	try {
+				sender.sendMessage(gelfMessage);
+			} catch (IOException e) {
+				// Don`t care
+			}
+        }
     }
     
-    private LoggingEvent downgrade(LogEvent ev) {
-    	LoggingEvent e = new LoggingEvent(ev.getLoggerFqcn(), Category.getInstance(ev.getLoggerName()), ev.getTimeMillis(), Level.toLevel(ev.getLevel().name()), ev.getMessage(), ev.getThrown());
-    	return e;
-	}
-
 	@Override
     public void stop() {
-		if (appender != null) {
-			appender.close();
-		}
+		if (sender != null) {
+            sender.close();
+            sender = null;            
+        }
+		 
     	super.stop();
     }
 
@@ -50,7 +205,16 @@ public class GelfAppender2 extends AbstractAppender {
             @PluginAttribute("name") String name,
             @PluginElement("Layout") Layout<? extends Serializable> layout,
             @PluginElement("Filter") final Filter filter,
-            @PluginAttribute(value = "host", defaultString = "localhost") String host) {
+            @PluginAttribute(value = "protocol") String protocol,
+            @PluginAttribute(value = "host") String host,
+            @PluginAttribute(value = "port") int port,
+            @PluginAttribute(value = "addExtendedInformation") Boolean addExtendedInformation,
+            @PluginAttribute(value = "fields") String fields,
+            @PluginAttribute(value = "facility") String facility,
+            @PluginAttribute(value = "originHost") String originHost,
+            @PluginAttribute(value = "extractStackTrace") Boolean extractStackTrace,
+            @PluginAttribute(value = "updater") String updater
+            ) {
         if (name == null) {
             LOGGER.error("No name provided for GelfAppender2");
             return null;
@@ -59,9 +223,73 @@ public class GelfAppender2 extends AbstractAppender {
         if (layout == null) {
             layout = PatternLayout.createDefaultLayout();
         }
-        GelfAppender appender = new GelfAppender(); 
-        appender.setHost(host);
-        GelfAppender2 a = new GelfAppender2(appender, name, filter, layout, true);
+        
+        if (originHost == null) {
+    		originHost = GelfSender.findLocalHostName();
+    	}
+    	
+    	if (facility == null) {
+    		facility = System.getProperty("jvmRoute", "gelf-logger");
+    	}    	
+        
+        if (addExtendedInformation == null) {
+        	addExtendedInformation = true;
+        }
+        
+        if (extractStackTrace == null) {
+        	extractStackTrace = true;
+        }
+        
+        GelfAppender2 a = new GelfAppender2(name, filter, layout, true, protocol, host, port, 
+        		addExtendedInformation, fields, facility, originHost, extractStackTrace, updater);
         return a;
     }
+
+	public Map<String, String> getPreparedFields() {
+		return preparedFields;
+	}
+
+	public void setPreparedFields(Map<String, String> preparedFields) {
+		this.preparedFields = preparedFields;
+	}
+
+	public String getFields() {
+		return fields;
+	}
+
+	public void setFields(String fields) {
+		this.fields = fields;
+	}
+
+	public String getFacility() {
+		return facility;
+	}
+
+	public void setFacility(String facility) {
+		this.facility = facility;
+	}
+
+	public String getOriginHost() {
+		return originHost;
+	}
+
+	public void setOriginHost(String originHost) {
+		this.originHost = originHost;
+	}
+
+	public boolean isExtractStacktrace() {
+		return extractStacktrace;
+	}
+
+	public void setExtractStacktrace(boolean extractStacktrace) {
+		this.extractStacktrace = extractStacktrace;
+	}
+
+	public boolean isAddExtendedInformation() {
+		return addExtendedInformation;
+	}
+
+	public void setAddExtendedInformation(boolean addExtendedInformation) {
+		this.addExtendedInformation = addExtendedInformation;
+	}
 }

@@ -5,7 +5,7 @@ package com.wizecore.graylog;
  * 
  * @author ruslan
  */
-public interface MessageUpdater {
+public interface GelfMessageUpdater {
 
 	/**
 	 * Provide additional information in message.

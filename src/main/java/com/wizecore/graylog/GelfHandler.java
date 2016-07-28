@@ -26,10 +26,12 @@ public class GelfHandler extends Handler {
 	protected LogManager manager = LogManager.getLogManager();
     protected GelfSender sender;
     protected String originHost;
-    protected String facility;
+    protected String facility = "gelf-logger";
     protected boolean extractStacktrace = true;
     protected boolean addExtendedInformation = true;
-    protected Map<String, String> fields;    
+    protected Map<String, String> preparedFields;
+    protected String updater;
+    protected GelfMessageUpdater updaterInstance;
 
     protected String getLocalHostName() {
         try {
@@ -42,7 +44,7 @@ public class GelfHandler extends Handler {
     }
     
     public GelfHandler() {
-		originHost = getLocalHostName();
+		originHost = GelfSender.findLocalHostName();
 	}
 
     public String getFacility() {
@@ -77,11 +79,11 @@ public class GelfHandler extends Handler {
         this.addExtendedInformation = addExtendedInformation;
     }
     
-    public Map<String, String> getFields() {
-        if (fields == null) {
-            fields = new HashMap<String, String>();
+    public Map<String, String> getPreparedFields() {
+        if (preparedFields == null) {
+            preparedFields = new HashMap<String, String>();
         }
-        return fields;
+        return preparedFields;
     }
 
     public GelfSender getSender() {
@@ -97,9 +99,7 @@ public class GelfHandler extends Handler {
     
     @Override
     public void publish(LogRecord record) {
-    	// long s = System.currentTimeMillis();
-		
-		if (!isLoggable(record)) {
+    	if (!isLoggable(record)) {
             return;
         }
 
@@ -149,10 +149,19 @@ public class GelfHandler extends Handler {
 		extractStacktrace = "true".equalsIgnoreCase(getStringProperty(cname + ".stacktrace", "true"));
 		facility = getStringProperty(cname + ".facility", System.getProperty("jvmRoute", facility));
 		originHost = getStringProperty(cname + ".originHost", originHost);
+		updater = getStringProperty(cname + ".updater", updater);
 		
-		String f = getStringProperty(cname + ".fields", null);
-		if (f != null) {
-			for (StringTokenizer en = new StringTokenizer(f, ",; \r\n\t"); en.hasMoreElements();) {
+		if (updater != null) {
+			try {
+				updaterInstance = (GelfMessageUpdater) Class.forName(updater).newInstance();
+			} catch (Exception e) {
+				System.err.println("GelfHandler: failed to create " + updater + " instance: " + e);
+			}
+		}
+		
+		String fields = getStringProperty(cname + ".fields", null);
+		if (fields != null) {
+			for (StringTokenizer en = new StringTokenizer(fields, ",; \r\n\t"); en.hasMoreElements();) {
 				String v = en.nextToken();
 				if (v != null && !v.trim().equals("=")) {
 					String n = v;
@@ -160,7 +169,7 @@ public class GelfHandler extends Handler {
 					if (eqi >= 0) {
 						v = v.substring(eqi + 1);
 						n = n.substring(0, eqi);
-						getFields().put(n, v);
+						getPreparedFields().put(n, v);
 					}
 				}
 			}
@@ -175,7 +184,7 @@ public class GelfHandler extends Handler {
 		sender = s;
 		System.err.println("Started GELF handler: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + 
 						", min level " + getLevel() + 
-						", facility " + getFacility() + ", formatter " + getFormatter());
+						", facility " + getFacility() + ", originHost " + originHost);
 	}
 
 	protected GelfMessage makeMessage(LogRecord event) {
@@ -217,7 +226,7 @@ public class GelfHandler extends Handler {
             gelfMessage.setFacility(getFacility());
         }
 
-        Map<String, String> fields = getFields();
+        Map<String, String> fields = getPreparedFields();
         for (Map.Entry<String, String> entry : fields.entrySet()) {
             gelfMessage.addField(entry.getKey(), entry.getValue());
         }
@@ -247,12 +256,16 @@ public class GelfHandler extends Handler {
                 gelfMessage.addField("logger", event.getLoggerName());
             }
         }
+        
+        if (updaterInstance != null) {
+        	updaterInstance.update(gelfMessage);
+        }
 
         return gelfMessage;
     }
 	
 	/**
-     * Convert JUL log4j to syslog equivalent.
+     * Convert JUL level to syslog equivalent.
      */
     public static int getSyslogEquivalent(Level level) {
     	int lev = GelfMessage.SYSLOG_INFO;
@@ -329,5 +342,21 @@ public class GelfHandler extends Handler {
 	 */
 	public void setSender(GelfSender sender) {
 		this.sender = sender;
+	}
+
+	public String getUpdater() {
+		return updater;
+	}
+
+	public void setUpdater(String updater) {
+		this.updater = updater;
+	}
+
+	public GelfMessageUpdater getUpdaterInstance() {
+		return updaterInstance;
+	}
+
+	public void setUpdaterInstance(GelfMessageUpdater updaterInstance) {
+		this.updaterInstance = updaterInstance;
 	}
 }
