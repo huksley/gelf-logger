@@ -1,6 +1,5 @@
 gelf-logger
 ===========
-
 Unified logger for java to send message to Graylog via JUL, Log4j, etc. ZERO external dependencies.
 
 Supports sending via GELF to:
@@ -9,12 +8,19 @@ Supports sending via GELF to:
 
 Supports logging frameworks:
   * Java Util Logging
-  * Log4j (preliminary version)
-  * Log4j2 (preliminary version)
+  * Log4j (experimental version)
+  * Log4j2 (experimental version)
+
+License
+=======
+Apache License 2.0
+
+Derived work
+============
+This project is based on https://github.com/Graylog2/gelfj/ and contain contributions from authors of this project.
 
 Supported generic options
 =========================
-
   * **host** Graylog (or other GELF server such as logstash) to send logs to. Default: localhost
   * **facility** Subsystem which generated logs. Usually this is server node or process. Default: gelf-logger, or jvmRoute system property, if defined.
   * **protocol** Protocol to use to connect to Graylog. Default: UDP
@@ -27,7 +33,6 @@ Supported generic options
 
 Java Util Logging
 =================
-
 Add these lines to logging.properties file (specifed via -Djava.util.logging.config.file=logging.properties or framework)
 	
 	# Add to handlers
@@ -69,7 +74,6 @@ Add these lines to logging.properties file (specifed via -Djava.util.logging.con
 
 Log4j
 =====
-
 Supports the same set of properties as in Java Util Logging configuration, see above.
 
 If using XML configuration format, declare appender:
@@ -102,7 +106,6 @@ Attach to root logger, or elsewhere:
 
 Log4j2
 ======
-
 Add to appenders:
 	
 	<Appenders>
