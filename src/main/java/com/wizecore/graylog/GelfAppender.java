@@ -109,12 +109,13 @@ public class GelfAppender extends AppenderSkeleton {
 		super.activateOptions();
 		
 		Protocol proto = Protocol.UDP;
-		if (protocol.equalsIgnoreCase("udp")) {
+		if (protocol != null && protocol.equalsIgnoreCase("udp")) {
 			proto = Protocol.UDP;
 		} else
-		if (protocol.equalsIgnoreCase("tcp")) {
+		if (protocol != null && protocol.equalsIgnoreCase("tcp")) {
 			proto = Protocol.TCP;
-		} else {
+		} else 
+		if (protocol != null) {
 			throw new IllegalArgumentException("Unknown protocol: " + protocol);
 		}
 		
