@@ -12,12 +12,14 @@ import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.LogRecord;
 
+import com.wizecore.graylog.GelfSender.Protocol;
+
 /**
  * Java java.util.logging.Handler implementation which sends messages to Graylog2 in GELF format.
  * <p>
  * Loosely based on https://github.com/Graylog2/gelfj implementation for log2j by Anton Yakimov &amp; Jochen Schalanda.
  *
- * @author Ruslan Gainutdinov <husley@wizecore.com>
+ * @author Ruslan Gainutdinov <huksley@wizecore.com>
  * @author Anton Yakimov
  * @author Jochen Schalanda
  */
@@ -135,14 +137,14 @@ public class GelfHandler extends Handler {
 		}
 		
 		String protocol = getStringProperty(cname + ".protocol", "udp");
-		int proto = 0;
+		Protocol proto = Protocol.UDP;
 		if (protocol.equalsIgnoreCase("udp")) {
-			proto = 0;
+			proto = Protocol.UDP;
 		} else
 		if (protocol.equalsIgnoreCase("tcp")) {
-			proto = 1;
+			proto = Protocol.TCP;
 		} else {
-			throw new IOException("Unknown protocol: " + protocol);
+			throw new IllegalArgumentException("Unknown protocol: " + protocol);
 		}
 		
 		addExtendedInformation = "true".equalsIgnoreCase(getStringProperty(cname + ".extended", "true"));		

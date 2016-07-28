@@ -30,8 +30,13 @@ public class GelfSender {
     private static final int MAXIMUM_UDP_CHUNK_SIZE = 1420;   
     private static final int PORT_MIN = 9000;
     private static final int PORT_MAX = 9888;
+    
+    enum Protocol {
+    	UDP,
+    	TCP
+    };
 
-    private int proto = 0; // 0 - udp, 1 - tcp
+    private Protocol proto = Protocol.UDP;
     private String host = null;
     private int port;
     private DatagramSocket udpSocket;   
@@ -42,7 +47,7 @@ public class GelfSender {
         this(host, DEFAULT_PORT);
     }
     
-    public GelfSender(int proto, String host, int port) {
+    public GelfSender(Protocol proto, String host, int port) {
     	this.proto = proto;
     	this.host = host;
         this.port = port;
@@ -54,7 +59,7 @@ public class GelfSender {
     }
 
     protected void initiateSocket() throws IOException {
-    	if (proto == 0) {
+    	if (proto == Protocol.UDP) {
             int port = PORT_MIN;
             DatagramSocket resultingSocket = null;
             boolean binded = false;
@@ -71,7 +76,7 @@ public class GelfSender {
             }                  
             udpSocket = resultingSocket;
     	} else
-    	if (proto == 1) {
+    	if (proto == Protocol.TCP) {
             // Will do upon log
     	}
     }
@@ -100,17 +105,17 @@ public class GelfSender {
     	}
 	}
 	
-	public int getProtocol() {
+	public Protocol getProtocol() {
 		return proto;
 	}
 	
-	public void setProtocol(int proto) {
+	public void setProtocol(Protocol proto) {
 		this.proto = proto;
 	}
 
     public void sendMessage(GelfMessage m) throws IOException {
         if (m.isValid()) {
-        	if (proto == 1) {
+        	if (proto == Protocol.TCP) {
         		String json = GelfMessage.formatMessage(m);
         		json += '\0';
 				sendPacket(json.getBytes("UTF-8"));
@@ -195,9 +200,10 @@ public class GelfSender {
     }
         
     protected void sendDatagrams(List<byte[]> bytesList) throws IOException {
-    	if (proto != 0) {
+    	if (proto != Protocol.UDP) {
     		throw new IOException("Invalid protocol!");
     	}
+    	
     	if (udpSocket == null) {
     		findDestination();
     		initiateSocket();

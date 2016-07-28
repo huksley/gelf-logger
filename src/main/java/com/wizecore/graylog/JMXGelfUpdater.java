@@ -6,7 +6,7 @@ import java.lang.management.RuntimeMXBean;
 /**
  * Uses JMX to obtain JVM process information and update message.
  * 
- * @author ruslan
+ * @author Ruslan Gainutdinov <huksley@wizecore.com>
  */
 public class JMXGelfUpdater implements GelfMessageUpdater {
 

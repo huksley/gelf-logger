@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>graylog2-gelf-jul-handler</name>
+	<name>gelf-logger</name>
 	<comment></comment>
 	<projects>
 	</projects>

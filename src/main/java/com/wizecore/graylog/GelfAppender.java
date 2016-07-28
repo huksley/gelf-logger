@@ -1,7 +1,6 @@
 package com.wizecore.graylog;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -10,8 +9,10 @@ import org.apache.log4j.AppenderSkeleton;
 import org.apache.log4j.Level;
 import org.apache.log4j.spi.LoggingEvent;
 
+import com.wizecore.graylog.GelfSender.Protocol;
+
 /**
- * @author Ruslan Gainutdinov <husley@wizecore.com>
+ * @author Ruslan Gainutdinov <huksley@wizecore.com>
  * @author Anton Yakimov
  * @author Jochen Schalanda
  */
@@ -107,12 +108,12 @@ public class GelfAppender extends AppenderSkeleton {
 	public void activateOptions() {
 		super.activateOptions();
 		
-		int proto = 0;
+		Protocol proto = Protocol.UDP;
 		if (protocol.equalsIgnoreCase("udp")) {
-			proto = 0;
+			proto = Protocol.UDP;
 		} else
 		if (protocol.equalsIgnoreCase("tcp")) {
-			proto = 1;
+			proto = Protocol.TCP;
 		} else {
 			throw new IllegalArgumentException("Unknown protocol: " + protocol);
 		}

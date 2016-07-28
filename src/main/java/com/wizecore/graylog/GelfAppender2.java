@@ -2,7 +2,6 @@ package com.wizecore.graylog;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.net.InetAddress;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -17,7 +16,8 @@ import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
 import org.apache.logging.log4j.core.config.plugins.PluginElement;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.apache.logging.log4j.core.layout.PatternLayout;
-import org.apache.logging.log4j.message.SimpleMessage;
+
+import com.wizecore.graylog.GelfSender.Protocol;
 
 @Plugin(name="Gelf", category="Core", elementType="appender", printObject=true)
 public class GelfAppender2 extends AbstractAppender {
@@ -48,16 +48,16 @@ public class GelfAppender2 extends AbstractAppender {
     	this.originHost = originHost;
     	this.extractStacktrace = extractStackTrace;
     	
-    	int proto = 0;
-        if (protocol.equalsIgnoreCase("udp")) {
-        	proto = 0;
-        } else
-        if (protocol.equalsIgnoreCase("tcp")) {
-        	proto = 1;
-        } else {
-        	throw new IllegalArgumentException("Unknown protocol: " + protocol);
-        }
-        
+    	Protocol proto = Protocol.UDP;
+		if (protocol.equalsIgnoreCase("udp")) {
+			proto = Protocol.UDP;
+		} else
+		if (protocol.equalsIgnoreCase("tcp")) {
+			proto = Protocol.TCP;
+		} else {
+			throw new IllegalArgumentException("Unknown protocol: " + protocol);
+		}
+		
         if (updater != null) {
 			try {
 				updaterInstance = (GelfMessageUpdater) Class.forName(updater).newInstance();

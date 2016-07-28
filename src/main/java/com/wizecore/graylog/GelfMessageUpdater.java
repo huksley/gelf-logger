@@ -3,7 +3,7 @@ package com.wizecore.graylog;
 /**
  * Override to provide additional message information.
  * 
- * @author ruslan
+ * @author Ruslan Gainutdinov <huksley@wizecore.com>
  */
 public interface GelfMessageUpdater {
 

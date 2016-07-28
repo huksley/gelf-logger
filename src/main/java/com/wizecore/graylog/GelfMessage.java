@@ -11,7 +11,8 @@ import java.util.Map.Entry;
 /**
  * Abstract self-contained GELF message representation, able to be converted to JSON string. 
  * 
- * @author ruslan
+ * @author Ruslan Gainutdinov <huksley@wizecore.com>
+ * @author Anton Yakimov
  */
 public class GelfMessage {    
 	public static final String ID_NAME = "id";	
