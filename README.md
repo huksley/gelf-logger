@@ -11,7 +11,20 @@ Supports logging frameworks:
   * Java Util Logging
   * Log4j (preliminary version)
   * Log4j2 (preliminary version)
-  
+
+Supported generic options
+=========================
+
+  * **host** Graylog (or other GELF server such as logstash) to send logs to. Default: localhost
+  * **facility** Subsystem which generated logs. Usually this is server node or process. Default: gelf-logger, or jvmRoute system property, if defined.
+  * **rotocol** Protocol to use to connect to Graylog. Default: UDP
+  * **port** Port to connect to. Default: 12202
+  * **fields** Additional comma separated list of fields to send along with message.
+  * **extended** If set to true, will gather exception, source class and method, logger name. Default: true
+  * **updater** Fully qualified class name which can update message to provide additional information, must implement com.wizecore.graylog.GelfMessageUpdater
+  * **stacktrace** If set to true, if exception attached to message it will be added to message text via newline.
+  * **originHost** Source of messages. Will be determined automatically if not set.
+
 Java Util Logging
 =================
 
