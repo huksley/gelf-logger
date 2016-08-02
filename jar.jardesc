@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="Windows-1251" standalone="no"?>
 <jardesc>
     <jar path="//webdevel-esb\c$\usr\mule-standalone-3.6.1\lib\boot\gelf-logger-1.0.jar"/>
-    <options buildIfNeeded="true" compress="true" descriptionLocation="/graylog2-gelf-jul-handler/jar.jardesc" exportErrors="true" exportWarnings="true" includeDirectoryEntries="false" overwrite="true" saveDescription="true" storeRefactorings="false" useSourceFolders="false"/>
+    <options buildIfNeeded="true" compress="true" descriptionLocation="/gelf-logger/jar.jardesc" exportErrors="true" exportWarnings="true" includeDirectoryEntries="false" overwrite="true" saveDescription="true" storeRefactorings="false" useSourceFolders="false"/>
     <storedRefactorings deprecationInfo="true" structuralOnly="false"/>
     <selectedProjects/>
-    <manifest generateManifest="false" manifestLocation="/graylog2-gelf-jul-handler/jar.mf" manifestVersion="1.0" reuseManifest="true" saveManifest="true" usesManifest="true">
+    <manifest generateManifest="false" manifestLocation="/gelf-logger/jar.mf" manifestVersion="1.0" reuseManifest="true" saveManifest="true" usesManifest="true">
         <sealing sealJar="false">
             <packagesToSeal/>
             <packagesToUnSeal/>
         </sealing>
     </manifest>
     <selectedElements exportClassFiles="true" exportJavaFiles="false" exportOutputFolder="false">
-        <javaElement handleIdentifier="=graylog2-gelf-jul-handler/src/main/java"/>
-        <javaElement handleIdentifier="=graylog2-gelf-jul-handler/src/main/resources"/>
+        <javaElement handleIdentifier="=gelf-logger/src/main/java"/>
+        <javaElement handleIdentifier="=gelf-logger/src/main/resources"/>
     </selectedElements>
 </jardesc>

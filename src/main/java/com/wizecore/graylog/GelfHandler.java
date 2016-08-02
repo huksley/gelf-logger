@@ -15,7 +15,7 @@ import java.util.logging.LogRecord;
 import com.wizecore.graylog.GelfSender.Protocol;
 
 /**
- * Java java.util.logging.Handler implementation which sends messages to Graylog2 in GELF format.
+ * {@link Handler} implementation which sends messages to Graylog2 in GELF format.
  * <p>
  * Loosely based on https://github.com/Graylog2/gelfj implementation for log2j by Anton Yakimov &amp; Jochen Schalanda.
  *
@@ -185,7 +185,7 @@ public class GelfHandler extends Handler {
 		);	
 	
 		sender = s;
-		System.err.println("Started GELF handler: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + 
+		System.err.println("Started GELF java logging handler: " + proto.name().toLowerCase() + "://" + sender.getHost() + ":" + sender.getPort() + 
 						", min level " + getLevel() + 
 						", facility " + getFacility() + ", originHost " + originHost);
 	}

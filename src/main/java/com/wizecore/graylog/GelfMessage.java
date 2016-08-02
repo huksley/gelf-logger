@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 /**
- * Abstract self-contained GELF message representation, able to be converted to JSON string. 
+ * Abstract self-contained GELF message representation, able to be converted to JSON string.
  * 
  * @author Ruslan Gainutdinov <huksley@wizecore.com>
  * @author Anton Yakimov

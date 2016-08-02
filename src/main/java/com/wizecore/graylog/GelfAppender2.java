@@ -19,6 +19,11 @@ import org.apache.logging.log4j.core.layout.PatternLayout;
 
 import com.wizecore.graylog.GelfSender.Protocol;
 
+/**
+ * Log2j v2. plugin with appender implementation which sends messages to Graylog2 in GELF format.
+ * 
+ * @author Ruslan Gainutdinov <huksley@wizecore.com>
+ */
 @Plugin(name="Gelf", category="Core", elementType="appender", printObject=true)
 public class GelfAppender2 extends AbstractAppender {
 
@@ -63,7 +68,7 @@ public class GelfAppender2 extends AbstractAppender {
 			try {
 				updaterInstance = (GelfMessageUpdater) Class.forName(updater).newInstance();
 			} catch (Exception e) {
-				System.err.println("GelfHandler: failed to create " + updater + " instance: " + e);
+				System.err.println("GelfAppender2: failed to create " + updater + " instance: " + e);
 			}
 		}
         
@@ -90,7 +95,7 @@ public class GelfAppender2 extends AbstractAppender {
         	port
         );
         sender = s;
-        System.err.println("Started GELF appender: " + protocol + "://" + sender.getHost() + ":" + sender.getPort() + 
+        System.err.println("Started GELF log4j2 appender: " + proto.name().toLowerCase() + "://" + sender.getHost() + ":" + sender.getPort() + 
         		", facility " + getFacility() + ", originHost " + getOriginHost());		
     }
     

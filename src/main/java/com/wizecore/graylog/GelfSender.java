@@ -19,17 +19,25 @@ import java.util.Random;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * Sends GELF messages.
+ * Sends GELF messages via TCP or UDP.
+ * 
  * Based on https://github.com/Graylog2/gelfj/blob/master/src/main/java/org/graylog2/GelfSender.java
  * Heavily reworked to be independent and self contained. All datagram and message serialization methods moved here.
  */
 public class GelfSender {
-    public static final int DEFAULT_PORT = 12201;   
+    public static final int DEFAULT_PORT = 12201;       
+    public static final byte[] GELF_UDP_CHUNKED_ID = new byte[] { 0x1e, 0x0f };
+    public static final int MAXIMUM_UDP_CHUNK_SIZE = 1420;
     
-	private static final byte[] GELF_UDP_CHUNKED_ID = new byte[] { 0x1e, 0x0f };
-    private static final int MAXIMUM_UDP_CHUNK_SIZE = 1420;   
-    private static final int PORT_MIN = 9000;
-    private static final int PORT_MAX = 9888;
+    /**
+     * Start for UDP port binding.
+     */
+    public static final int PORT_MIN = 9000;
+    
+    /**
+     * End of UDP port binding.
+     */
+    public static final int PORT_MAX = 9888;
     
     enum Protocol {
     	UDP,
