@@ -64,6 +64,10 @@ public class GelfAppender2 extends AbstractAppender {
 			throw new IllegalArgumentException("Unknown protocol: " + protocol);
 		}
 		
+		if (port == 0) {
+			port = GelfSender.DEFAULT_PORT;
+		}
+		
         if (updater != null) {
 			try {
 				updaterInstance = (GelfMessageUpdater) Class.forName(updater).newInstance();
